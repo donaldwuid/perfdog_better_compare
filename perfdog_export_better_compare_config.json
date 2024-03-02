@@ -1,0 +1,49 @@
+{
+    "project_column": "项目",
+    "average_framerate_column": "Avg(FPS)",
+    "resolution_width_column": "resolution_height",
+    "resolution_height_column": "resolution_width",
+
+    "columns_always_shown":
+    [
+        "用例", "项目", "场景",
+
+        "FPS>=25", "SmallJank", "BigJank",
+        "Avg(FTime)",
+        "Avg(CTemp)", "Avg(GTemp)", "Avg(NTemp)", "Avg(BTemp)",
+        "Avg(Memory)", "Peak(Memory)", "Avg(Memory+SwapMemory)", "Peak(Memory+SwapMemory)", "Avg(Gfx)", "Avg(GL)",
+        
+        "Avg(% Busy)", "Avg(% Vertex Fetch Stall) ", "Avg(% Texture Fetch Stall) ", "Avg(L1 Texture Cache Miss Per Pixel)", "Avg(% Texture L1 Miss)", "Avg(% Texture L2 Miss)", "Avg(% Stalled on System Memory)", 
+
+        "Avg(% Anisotropic Filtered)", 
+
+        "Avg(% Time Shading Fragments)", "Avg(% Time Shading Vertices)", "Avg(% Time Compute)",
+        "Avg(% Time ALUs Working)", "Avg(% Time EFUs Working)",
+        "Avg(ALU / Fragment)", "Avg(ALU / Vertex)", "Avg(EFU / Fragment)", "Avg(EFU / Vertex)",
+
+        "Avg(Textures / Vertex)", "Avg(Textures / Fragment)"
+    ],
+
+    "columns_divide_by_framerate": [
+        "Avg(AppCPU)", "Avg(AppCPU) [%] Normalized",
+        "Avg(Clocks / Second)", 
+        "Avg(Vertices Shaded / Second)", "Avg(Vertex Instructions / Second)",
+        "Avg(Read Total (Bytes/sec))", "Avg(Write Total (Bytes/sec))",
+
+        "Avg(Texture Memory Read BW (Bytes/Second))", "Avg(UBWC Texture Memory Read BW (Bytes/Second))", "Avg(Vertex Memory Read (Bytes/Second))"
+    ],
+    "columns_divide_by_resolution": [
+    ],
+    "columns_divide_by_framerate_and_resolution": [
+        "Avg(Fragment ALU Instructions / Sec", "Avg(Fragment EFU Instructions / Second)",
+        "Avg(Fragments Shaded / Second)", "Avg(Fragment Instructions / Second)"
+    ],
+
+    "columns_important_background": [
+        "Avg(FPS)", "Avg(AppCPU) [%] Normalized", "Avg(Memory)", "Avg(Clocks / Second)", "Avg(% Time Shading Fragments)", "Avg(% Time Shading Vertices)", 
+        "Avg(Vertices Shaded / Second)", "Avg(Fragments Shaded / Second)",
+        "Avg(Vertex Instructions / Second)", "Avg(Fragment Instructions / Second)",
+        "Avg(Read Total (Bytes/sec))", "Avg(Write Total (Bytes/sec))",
+        "Avg(Texture Memory Read BW (Bytes/Second))"
+    ]
+  }
