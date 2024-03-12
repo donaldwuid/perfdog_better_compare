@@ -37,18 +37,44 @@ except ImportError:
 
 
 
-def process_data(input_data_list, input_perfdog_config, output_xlsx, specify_resolution, show_only_columns_in_config, target_project_name):
+def process_data(input_data_list, input_perfdog_config, output_xlsx, divided_by_framerate, divided_by_resolution, compare_target_column_name, compare_target_name, show_only_columns_in_config):
 
     input_data_list = [os.path.normpath(path) for path in input_data_list]
-    input_perfdog_config = os.path.normpath(input_perfdog_config)
     if not output_xlsx:
         output_xlsx = os.path.splitext(input_data_list[0])[0] + "_better_compare.xlsx"
 
     print(f"input_data: {input_data_list}")
-    print(f"input_perfdog_config: {input_perfdog_config}")
     print(f"output_xlsx: {output_xlsx}")
-    print(f"target_project_name: {target_project_name}")
-    print(f"specify_resolution: {specify_resolution}, show_only_columns_in_config: {show_only_columns_in_config}")
+    
+
+    print(f"divided_by_framerate: {divided_by_framerate}, divided_by_resolution: {divided_by_resolution}")
+    
+        
+    print(f"compare_target_column_name: {compare_target_column_name}, compare_target_name: {compare_target_name}")
+    print(f"show_only_columns_in_config: {show_only_columns_in_config}")
+
+    if not input_perfdog_config:
+        current_script_path = os.path.abspath(__file__)
+        current_script_dir = os.path.dirname(current_script_path)
+        input_perfdog_config = current_script_dir + "/perfdog_export_better_compare_config.json"
+        print(f"input_perfdog_config is empty, default to: {input_perfdog_config}")
+    input_perfdog_config = os.path.normpath(input_perfdog_config)
+    print(f"input_perfdog_config: {input_perfdog_config}")
+
+    try:
+        # read the json config
+        with open(input_perfdog_config, encoding='utf-8') as json_file:
+            config_data = json.load(json_file)
+    except FileNotFoundError:
+        print(f"Error: File '{input_perfdog_config}' not found.")
+        sys.exit(1)
+    except IOError:
+        print(f"Error: Unable to open file '{input_perfdog_config}'.")
+        sys.exit(1)
+
+    if not compare_target_column_name:
+        compare_target_column_name = config_data["project_column"]
+        print(f"compare_target_column_name is empty, default to: {compare_target_column_name}")
 
     # converting the mega or giga data cells
     def convert_mega_giga(cell_value):
@@ -82,11 +108,8 @@ def process_data(input_data_list, input_perfdog_config, output_xlsx, specify_res
         else:
             return x.astype(str).str.cat(sep='\n')
 
-    df = df.groupby('项目').agg(custom_agg).reset_index()
+    df = df.groupby(compare_target_column_name).agg(custom_agg).reset_index()
 
-    # read the json config
-    with open(input_perfdog_config, encoding='utf-8') as json_file:
-        config_data = json.load(json_file)
 
     # ask user to input the missing important columns
     important_columns = [config_data["average_framerate_column"]]
@@ -100,12 +123,12 @@ def process_data(input_data_list, input_perfdog_config, output_xlsx, specify_res
     resolution_columns = [config_data["resolution_width_column"], config_data["resolution_height_column"]]
     for column in resolution_columns:
         if column not in df.columns:
-            if specify_resolution:
+            if divided_by_resolution:
                 print(f"missing resolution columns: {column}")
             else:
                 print(f"missing resolution columns: {column}, will reset to 1")
             for index, row in df.iterrows():
-                if specify_resolution:
+                if divided_by_resolution:
                     value = input(f"Please input Test Case {row['用例']}'s {column} value: ")
                     df.at[index, column] = value
                 else:
@@ -124,14 +147,17 @@ def process_data(input_data_list, input_perfdog_config, output_xlsx, specify_res
     # processing the data
     for column in df_processed.columns:
         if any(config_col in column for config_col in config_data['columns_divide_by_framerate']):
-            df_processed[column] = df_processed[column].astype(float) / df_processed[config_data["average_framerate_column"]].astype(float)
-            df_processed.rename(columns={column: column + '\n(/framerate)'}, inplace=True)
+            if divided_by_framerate:
+                df_processed[column] = df_processed[column].astype(float) / df_processed[config_data["average_framerate_column"]].astype(float)
+                df_processed.rename(columns={column: column + '\n(/framerate)'}, inplace=True)
         elif any(config_col in column for config_col in config_data['columns_divide_by_resolution']):
-            df_processed[column] = df_processed[column].astype(float) / (df_processed[config_data["resolution_height_column"]].astype(float) * df_processed[config_data["resolution_width_column"]].astype(float))
-            df_processed.rename(columns={column: column + '\n(/resolution)'}, inplace=True)
+            if divided_by_resolution:
+                df_processed[column] = df_processed[column].astype(float) / (df_processed[config_data["resolution_height_column"]].astype(float) * df_processed[config_data["resolution_width_column"]].astype(float))
+                df_processed.rename(columns={column: column + '\n(/resolution)'}, inplace=True)
         elif any(config_col in column for config_col in config_data['columns_divide_by_framerate_and_resolution']):
-            df_processed[column] = df_processed[column].astype(float) / (df_processed[config_data["average_framerate_column"]].astype(float) * df_processed[config_data["resolution_height_column"]].astype(float) * df_processed[config_data["resolution_width_column"]].astype(float))
-            df_processed.rename(columns={column: column + '\n(/(framerate*resolution))'}, inplace=True)
+            if divided_by_framerate and divided_by_resolution:
+                df_processed[column] = df_processed[column].astype(float) / (df_processed[config_data["average_framerate_column"]].astype(float) * df_processed[config_data["resolution_height_column"]].astype(float) * df_processed[config_data["resolution_width_column"]].astype(float))
+                df_processed.rename(columns={column: column + '\n(/(framerate*resolution))'}, inplace=True)
 
 
     def fix_filename(filename):
@@ -140,19 +166,19 @@ def process_data(input_data_list, input_perfdog_config, output_xlsx, specify_res
         return re.sub(illegal_chars, '_', filename)
     df_compare_target = None
     target_project_compare_sheet_name = ""
-    if target_project_name:
+    if compare_target_column_name and compare_target_name:
         # 找到目标项目
-        target_row = df_processed.loc[df_processed[config_data["project_column"]] == target_project_name]
+        target_row = df_processed.loc[df_processed[compare_target_column_name] == compare_target_name]
         if not target_row.empty:
             # 创建新的DataFrame
             df_compare_target = pd.DataFrame(columns=df_processed.columns)
-            target_project_compare_sheet_name = fix_filename(target_project_name) + " VS. OtherProjects"
+            target_project_compare_sheet_name = fix_filename(compare_target_name) + " VS. Others"
             comparison_rows = []
             for index, row in df_processed.iterrows():
-                if row['项目'] == target_project_name:
+                if row[compare_target_column_name] == compare_target_name:
                     continue
 
-                comparison_row = {'项目': f"{target_project_name}\nVS.\n{row['项目']}"}
+                comparison_row = {compare_target_column_name: f"{compare_target_name}\n VS. \n{row[compare_target_column_name]}"}
                 for col in df_processed.columns[1:]:
                     target_value = target_row[col].values[0]
                     other_value = row[col]
@@ -164,6 +190,8 @@ def process_data(input_data_list, input_perfdog_config, output_xlsx, specify_res
 
                 comparison_rows.append(comparison_row)
                 df_compare_target.loc[len(df_compare_target.index)] = comparison_row
+        else:
+            print(f"Warning! Cannot find compare target value for {compare_target_name}! Will not generate the {compare_target_name} VS. Others heatmap!!!")
 
 
     
@@ -173,15 +201,15 @@ def process_data(input_data_list, input_perfdog_config, output_xlsx, specify_res
         return tail or ntpath.basename(head)
     # save data to excels
     with pd.ExcelWriter(output_xlsx) as writer:
-        df_processed.to_excel(writer, sheet_name='Normalized', index=False)
+        df_processed.to_excel(writer, sheet_name='BarCompare', index=False)
         if df_compare_target is not None:
             df_compare_target.to_excel(writer, sheet_name=target_project_compare_sheet_name, index=False)
         for i, one_df in enumerate(input_df_list):
-            one_df.to_excel(writer, sheet_name=str(i) + '.' + path_leaf(input_data_list[i]), index=False)
+            one_df.to_excel(writer, sheet_name='CompareSource' + str(i), index=False)
 
     # drawing data bars
     wb = openpyxl.load_workbook(output_xlsx)
-    ws = wb['Normalized']
+    ws = wb['BarCompare']
     for i, column in enumerate(ws.columns):
         column = [cell for cell in column]
         if isinstance(column[1].value, (int, float)):
@@ -283,15 +311,21 @@ def process_data(input_data_list, input_perfdog_config, output_xlsx, specify_res
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--input_data_list', help='Input perfdog exported file path list (xlsx or csv format)', nargs='+', required=True)
-    parser.add_argument('--input_perfdog_config', help='Input PerfDog config file path (json format)', required=True)
-    parser.add_argument('--output_xlsx', help='Output xlsx file path')
+    parser.add_argument('--input_data_list', help='required, input at least one (or multiple) perfdog exported xls. multiple xls\'s stats will be averaged for each project.', nargs='+', required=True)
+    parser.add_argument('--input_perfdog_config', help='Input PerfDog config file path (json format). You can specify the provided perfdog_export_better_compare_config.json')
+    parser.add_argument('--output_xlsx', help='output file path. if not specified, OUTPUT_XLSX will be INPUT_DATA_LIST[0]_better_compare.xlsx')
+    
+    parser.add_argument('--divided_by_framerate', action='store_true', help='false by default, whether normalized some columns by the framerate, see also perfdog_export_better_compare_config.json')
+    parser.add_argument('--divided_by_resolution', action='store_true', help='false by default, whether normalized some columns by the resolution, see also perfdog_export_better_compare_config.json')
+
+    parser.add_argument('--compare_target_column_name', help='optional, optional, default to "项目", you may change to "用例"')
+    parser.add_argument('--compare_target_name', help='optional, input one target name and generate the "Target VS. Others" sheet. target name is one of values in compare_target_column_name column (default is "项目", you may change to "用例" by the --compare_target_column_name param')
+    
     parser.add_argument('--show_only_columns_in_config', help='Normalized sheet show only columns in config json', default=True)
-    parser.add_argument('--specify_resolution', action='store_true', help='Specify each user case\'s resolution. Depending on the input config, this will enable some metric columns to be divided by resolution, in order to get the resolution-normalized comparation')
-    parser.add_argument('--target_project_name', help='Pick a target project from existing N projects in the input data, and compare other projects with this one. If sepecified, will append N-1 rows comparing each metric\'s percentage of target_project_name vs. other projects')
+
     args = parser.parse_args()
 
-    process_data(args.input_data_list, args.input_perfdog_config, args.output_xlsx, args.specify_resolution, args.show_only_columns_in_config, args.target_project_name)
+    process_data(args.input_data_list, args.input_perfdog_config, args.output_xlsx, args.divided_by_framerate, args.divided_by_resolution, args.compare_target_column_name, args.compare_target_name, args.show_only_columns_in_config)
 
 if __name__ == '__main__':
     main()

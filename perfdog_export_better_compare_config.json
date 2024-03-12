@@ -1,5 +1,6 @@
 {
     "project_column": "项目",
+    "test_case_column": "用例",
     "average_framerate_column": "Avg(FPS)",
     "resolution_width_column": "resolution_height",
     "resolution_height_column": "resolution_width",
