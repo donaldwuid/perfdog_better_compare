@@ -83,6 +83,18 @@
         "Avg(Texture Memory Read BW (Bytes/Second))",
 
         
-        "////////// following are ARM Mali GPU Metrics //////////"
+        "////////// following are ARM Mali GPU Metrics //////////",
+        "Avg(GPU active)", "Avg(Non-fragment queue active)", "Avg(Fragment queue active)",
+        "Avg(Read bytes)", "Avg(Write bytes)",
+
+        "Avg(Pixels)", "Avg(GPU cycles/pixel)", "Avg(Fragments/pixel)",
+
+        "Avg(FPK kill rate)",
+
+        "Avg(Non-fragment utilization)", "Avg(Fragment utilization)",
+        "Avg(Arithmetic unit utilization)", "Avg(Varying unit utilization)", "Avg(Texture unit utilization)",
+        "Avg(All registers warp rate)",
+
+        "Avg(Input bus utilization)", "Avg(Output bus utilization)"
     ]
   }
