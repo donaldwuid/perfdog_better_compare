@@ -27,24 +27,62 @@
 
     "columns_divide_by_framerate": [
         "Avg(AppCPU)", "Avg(AppCPU) [%] Normalized",
+
+        
+        "////////// following are Qualcomm Adreno GPU Metrics //////////",
         "Avg(Clocks / Second)", 
         "Avg(Vertices Shaded / Second)", "Avg(Vertex Instructions / Second)",
         "Avg(Read Total (Bytes/sec))", "Avg(Write Total (Bytes/sec))",
 
-        "Avg(Texture Memory Read BW (Bytes/Second))", "Avg(UBWC Texture Memory Read BW (Bytes/Second))", "Avg(Vertex Memory Read (Bytes/Second))"
+        "Avg(Texture Memory Read BW (Bytes/Second))", "Avg(UBWC Texture Memory Read BW (Bytes/Second))", "Avg(Vertex Memory Read (Bytes/Second))",
+
+
+        "////////// following are ARM Mali GPU Metrics //////////",
+        "Avg(GPU active)",
+        "Avg(Non-fragment queue active)",
+        "Avg(GPU interrupt active)", "Avg(Non-fragment queue utilization)", "Avg(Read stall rate)", "Avg(Write stall rate)", "Avg(Non-fragment warps)",
+        "Avg(Non-fragment utilization)"
     ],
     "columns_divide_by_resolution": [
     ],
     "columns_divide_by_framerate_and_resolution": [
+        "////////// following are Qualcomm Adreno GPU Metrics //////////",
         "Avg(Fragment ALU Instructions / Sec", "Avg(Fragment EFU Instructions / Second)",
-        "Avg(Fragments Shaded / Second)", "Avg(Fragment Instructions / Second)"
+        "Avg(Fragments Shaded / Second)", "Avg(Fragment Instructions / Second)",
+
+
+        "////////// following are ARM Mali GPU Metrics //////////",
+        "Avg(Fragment queue active)", "Avg(Fragment queue utilization)", "Avg(Interrupt utilization)",
+        "Avg(Read bytes)", "Avg(Write bytes)", " cycles)", "Avg(Pixels)", "Avg(Fragment warps)",
+        "Avg(Shader core usage)",
+        "Avg(Fragment utilization)", "Avg(Arithmetic unit utilization)", "Avg(Varying unit utilization)", "Avg(Texture unit utilization)",
+        "Avg(Load/store unit utilization)",
+
+        "Avg(Varying active)", "Avg(16-bit interpolation cycles)", "Avg(32-bit interpolation cycles)",
+
+        "Avg(Texturing active)", "Avg(4x bilinear filtering active)", "Avg(2x trilinear filtering active)",
+
+        "Avg(4x data path filtering rate)", "Avg(Input bus utilization)", "Avg(Output bus utilization)", "Avg(L2 read bytes/cy)",
+
+        "Avg(External read bytes/cy)", "Avg(Load/store active cycles)",
+
+        "Avg(Full read cycles)", "Avg(Partial read cycles)", "Avg(Full write cycles)", "Avg(Partial write cycles)",
+
+        "Avg(L2 read bytes/cy)", "Avg(External read bytes/cy)", "Avg(L2 write bytes/cy)", "Avg(Front-end bytes)", "Avg(Load/store bytes)", "Avg(Texture bytes)", "Avg(Front-end bytes)", "Avg(Load/store bytes)", "Avg(Texture bytes)", "Avg(Load/store bytes)", "Avg(Tile buffer bytes)"
     ],
 
     "columns_important_background": [
-        "Avg(FPS)", "Avg(AppCPU) [%] Normalized", "Avg(Memory)", "Avg(Clocks / Second)", "Avg(% Time Shading Fragments)", "Avg(% Time Shading Vertices)", 
+        "Avg(FPS)", "Avg(AppCPU) [%] Normalized", "Avg(Memory)", 
+        
+        
+        "////////// following are Qualcomm Adreno GPU Metrics //////////",
+        "Avg(Clocks / Second)", "Avg(% Time Shading Fragments)", "Avg(% Time Shading Vertices)", 
         "Avg(Vertices Shaded / Second)", "Avg(Fragments Shaded / Second)",
         "Avg(Vertex Instructions / Second)", "Avg(Fragment Instructions / Second)",
         "Avg(Read Total (Bytes/sec))", "Avg(Write Total (Bytes/sec))",
-        "Avg(Texture Memory Read BW (Bytes/Second))"
+        "Avg(Texture Memory Read BW (Bytes/Second))",
+
+        
+        "////////// following are ARM Mali GPU Metrics //////////"
     ]
   }

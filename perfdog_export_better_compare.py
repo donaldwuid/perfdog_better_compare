@@ -77,8 +77,10 @@ def process_data(input_data_list, input_perfdog_config, output_xlsx, divided_by_
         print(f"compare_target_column_name is empty, default to: {compare_target_column_name}")
 
     # converting the mega or giga data cells
-    def convert_mega_giga(cell_value):
-        if 'mega' in str(cell_value).lower():
+    def convert_unit_prefix(cell_value):
+        if 'kilo' in str(cell_value).lower():
+            return float(cell_value.lower().replace('kilo', '')) * 1e3
+        elif 'mega' in str(cell_value).lower():
             return float(cell_value.lower().replace('mega', '')) * 1e6
         elif 'giga' in str(cell_value).lower():
             return float(cell_value.lower().replace('giga', '')) * 1e9
@@ -90,7 +92,7 @@ def process_data(input_data_list, input_perfdog_config, output_xlsx, divided_by_
         temp_df = pd.read_excel(one_input_data_name)
         temp_df.columns = temp_df.columns.str.replace('\n', ' ')
         for column in temp_df.columns:
-            temp_df[column] = temp_df[column].apply(convert_mega_giga)
+            temp_df[column] = temp_df[column].apply(convert_unit_prefix)
 
         input_df_list.append(temp_df)
 
