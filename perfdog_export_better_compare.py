@@ -214,7 +214,7 @@ def process_data(input_data_list, input_perfdog_config, output_xlsx, divided_by_
     ws = wb['BarCompare']
     for i, column in enumerate(ws.columns):
         column = [cell for cell in column]
-        if isinstance(column[1].value, (int, float)):
+        if all(isinstance(cell.value, (int, float)) for cell in column[1:]):
             values = [cell.value for cell in column[1:]]
             max_value = max(values)
             average_value = statistics.mean(values)
