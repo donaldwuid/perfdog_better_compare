@@ -343,32 +343,35 @@ def process_data(input_data_list, input_perfdog_config, output_xlsx, divided_by_
                     cell = ws_target.cell(row=i, column=j, value=value)
                     
                     # 设置样式
-                    if i == 1:
-                        # 第一行（标题）的样式
+                    if i == 1:  # 处理标题行（转置后是第一行）
                         cell.alignment = Alignment(wrap_text=True)
                         if value is not None and any(config_col in str(value) for config_col in config_data['columns_important_background']):
                             cell.fill = important_background_fill
-                    else:
-                        # 对于非标题行的数值单元格
+                    elif sheet_name == target_project_compare_sheet_name:  # 处理对比表格
                         if isinstance(value, (int, float)):
                             values.append(value)
-                            # 如果是对比表格，设置百分比格式和注释
-                            if sheet_name == target_project_compare_sheet_name:
-                                cell.number_format = "0.00%"
-                                # 获取原始值注释
-                                try:
-                                    row_idx = i - 2  # 减2是因为Excel的标题行占一行，且字典从0开始
-                                    if j < len(df_compare_target.columns):
-                                        col_name = df_compare_target.columns[j]
-                                        if row_idx in raw_values_dict and col_name in raw_values_dict[row_idx]:
-                                            raw_value = raw_values_dict[row_idx][col_name]
-                                            if raw_value:
-                                                cell.comment = openpyxl.comments.Comment(
-                                                    raw_value,
-                                                    'PerfDog Better Compare'
-                                                )
-                                except Exception as e:
-                                    print(f"Warning: Failed to add comment for cell at row {i}, column {j}: {str(e)}")
+                            cell.number_format = "0.00%"
+                            
+                            # 注意：在转置后
+                            # i 行对应原始数据的第 i-1 个列
+                            # j 列对应原始数据的第 j-2 个行（-2是因为跳过标题行，且原始数据行索引从0开始）
+                            try:
+                                if j >= 2 and i - 1 < len(df_compare_target.columns):  # 确保不处理第一列（标题列）
+                                    original_col = df_compare_target.columns[i-1]  # 获取原始列名
+                                    row_idx = j-2  # 对应到原始数据的行索引
+                                    if row_idx in raw_values_dict and original_col in raw_values_dict[row_idx]:
+                                        raw_value = raw_values_dict[row_idx][original_col]
+                                        if raw_value:
+                                            cell.comment = openpyxl.comments.Comment(
+                                                text=raw_value,
+                                                author='PerfDog Better Compare'
+                                            )
+                            except Exception as e:
+                                print(f"Warning: Failed to add comment for cell at row {i}, column {j}: {str(e)}")
+                            
+                    elif sheet_name == 'BarCompare':  # 处理BarCompare表格
+                        if isinstance(value, (int, float)):
+                            values.append(value)
                 
                 # 根据工作表类型设置格式
                 if i > 1:  # 跳过标题行
@@ -400,7 +403,7 @@ def process_data(input_data_list, input_perfdog_config, output_xlsx, divided_by_
                                 cell = ws_target.cell(row=i, column=j)
                                 cell.fill = color_cell(value, lower_bound, upper_bound)
                 
-                # 特殊处理第一列
+                # 特殊处理第一列 (之前的代码保持不变)
                 if i > 1:  # 跳过标题行
                     first_cell = ws_target.cell(row=i, column=1)
                     if first_cell.value is not None:
