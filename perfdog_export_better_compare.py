@@ -345,8 +345,6 @@ def process_data(input_data_list, input_perfdog_config, output_xlsx, divided_by_
                     # 设置样式
                     if i == 1:  # 处理标题行（转置后是第一行）
                         cell.alignment = Alignment(wrap_text=True)
-                        if value is not None and any(config_col in str(value) for config_col in config_data['columns_important_background']):
-                            cell.fill = important_background_fill
                     elif sheet_name == target_project_compare_sheet_name:  # 处理对比表格
                         if isinstance(value, (int, float)):
                             values.append(value)
@@ -421,7 +419,21 @@ def process_data(input_data_list, input_perfdog_config, output_xlsx, divided_by_
             # 设置其他列的固定宽度
             for col in range(2, ws_target.max_column + 1):
                 ws_target.column_dimensions[openpyxl.utils.get_column_letter(col)].width = 15
-    
+
+            # 单独处理重要指标的背景色
+            important_background_fill = openpyxl.styles.PatternFill(start_color="f9d3e3", end_color="f9d3e3", fill_type="solid")
+            for i, row in enumerate(transposed_data, 1):
+                cell = ws_target.cell(row=i, column=1)  # 获取第一列（标题列）
+                if cell.value is not None:
+                    # 检查是否为重要指标（移除可能的后缀后再匹配）
+                    cell_str = str(cell.value)
+                    # 移除可能的标准化后缀
+                    base_name = cell_str.split('\n')[0] if '\n' in cell_str else cell_str
+                    for config_col in config_data['columns_important_background']:
+                        if config_col in base_name:
+                            cell.fill = important_background_fill
+                            break  # 找到匹配就退出内层循环
+
     # 复制 CompareSource 工作表（不转置）
     for sheet_name in wb.sheetnames:
         if sheet_name.startswith('CompareSource'):
