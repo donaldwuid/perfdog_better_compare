@@ -21,10 +21,12 @@ And this python script improves it by,
 ## Usage
 
 ```bash
-usage: perfdog_export_better_compare.py 
+usage: perfdog_export_better_compare.py
     [-h] # show this help
 
-    --input_data_list INPUT_DATA_LIST [INPUT_DATA_LIST ...] # required, input at least one (or multiple) perfdog exported xls. multiple xls's stats will be averaged for each project.
+    [input_file]  # optional, input a single PerfDog exported xlsx file
+    
+    [--input_data_list INPUT_DATA_LIST [INPUT_DATA_LIST ...]] # optional, input multiple PerfDog exported xlsx files. multiple xlsx stats will be averaged for each project.
     [--output_xlsx OUTPUT_XLSX] # output file path. if not specified, OUTPUT_XLSX will be INPUT_DATA_LIST[0]_better_compare.xlsx
 
     [--input_perfdog_config INPUT_PERFDOG_CONFIG] # optional, Input PerfDog config file path (json format). Default is perfdog_export_better_compare_config.json
@@ -42,15 +44,14 @@ usage: perfdog_export_better_compare.py
 
 #### Default mode
 
-- input only 1 xlsx,
-- only show the bar sheet, 
-  - no "Target VS. Others" heatmap sheet is generated,
-- columns are not normalized by framerate nor resolution
-
+支持两种方式输入单个文件：
 ```bash
+# 方式1：直接输入文件名（推荐）
+python './perfdog_export_better_compare.py' ./PD_20240229_14_28_12.xlsx
+
+# 方式2：使用 --input_data_list 参数
 python './perfdog_export_better_compare.py' --input_data_list ./PD_20240229_14_28_12.xlsx
 ```
-
 
 #### Normalization
 
@@ -59,7 +60,6 @@ Sometimes, different test case has different framerate. To make the compare reas
 ```bash
 python './perfdog_export_better_compare.py' --divided_by_framerate --input_data_list ./PD_20240229_14_28_12.xlsx
 ```
-
 
 Sometimes, different test case has different framerate and resolution. To make the compare reasonalble, you can normalized some columns by both of them. Normalized columns are specified in the input config json file.
 
@@ -75,13 +75,11 @@ generate ProjectA VS. OtherProjects compare heatmap sheet,
 python './perfdog_export_better_compare.py' --compare_target_name ProjectA --input_data_list ./PD_20240229_14_28_12.xlsx
 ```
 
-
 generate TestCaseA VS. OtherTestCases compare heatmap sheet,
 
 ```bash
 python './perfdog_export_better_compare.py' --compare_target_column_name 用例 --compare_target_name TestCaseA --input_data_list ./PD_20240229_14_28_12.xlsx
 ```
-
 
 #### Multiple Input Files
 
@@ -91,4 +89,3 @@ Note, multiple xlsx must have the same value in `--compare_target_column_name` c
 
 ```bash
 python './perfdog_export_better_compare.py' --input_data_list ./PD_20240229_14_28_12.xlsx ./PD_20240229_14_42_57.xlsx
-```

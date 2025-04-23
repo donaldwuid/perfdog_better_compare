@@ -73,6 +73,7 @@
 
     "columns_important_background": [
         "Avg(FPS)", "Avg(AppCPU) [%] Normalized", "Avg(Memory)", 
+        "SmallJank(微小卡顿) (/10min)",
         
         
         "////////// following are Qualcomm Adreno GPU Metrics //////////",
@@ -95,6 +96,16 @@
         "Avg(Arithmetic unit utilization)", "Avg(Varying unit utilization)", "Avg(Texture unit utilization)",
         "Avg(All registers warp rate)",
 
-        "Avg(Input bus utilization)", "Avg(Output bus utilization)"
+        "Avg(Input bus utilization)", "Avg(Output bus utilization)",
+
+        "////////// following are Desktop Metrics //////////",
+        "Avg(PrivateBytes)", "Avg(DiskRead0)",
+
+        "////////// following are Desktop NVidia GPU Metrics //////////",
+        "Avg(AppDedicated0)", "Avg(TotalIOTime[ms])", "Avg(IOReadBytes)", "Avg(GPU-MemoryFree)",
+
+        
+        "////////// following are App Customized Metrics //////////",
+        "Avg(RenderTargetPoolUsed) GPU0", "Avg(RenderTargetPoolSize) GPU0", "Avg(TextureMemoryUsed)", "Avg(GNeverStreamTextureMemory)", "Avg(StreamingTextureCount)"
     ]
   }
