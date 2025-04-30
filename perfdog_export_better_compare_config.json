@@ -5,6 +5,8 @@
     "resolution_width_column": "resolution_height",
     "resolution_height_column": "resolution_width",
 
+    "forzen_column_num": 3,
+
     "columns_always_shown":
     [
         "用例", "项目", "场景",

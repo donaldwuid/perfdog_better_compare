@@ -434,6 +434,11 @@ def process_data(input_data_list, input_perfdog_config, output_xlsx, divided_by_
                             cell.fill = important_background_fill
                             break  # 找到匹配就退出内层循环
 
+            # 设置冻结窗格（冻结第一行和前 forzen_column_num 列）
+            # 注意：freeze_panes 的参数是 (行号, 列号)，表示从这个单元格开始不冻结
+            # 所以要冻结第一行和前三列，需要设置为 (2, 4)
+            ws_target.freeze_panes = ws_target.cell(row=config_data.get('forzen_column_num', 3) + 1, column=2)
+
     # 复制 CompareSource 工作表（不转置）
     for sheet_name in wb.sheetnames:
         if sheet_name.startswith('CompareSource'):
