@@ -429,12 +429,27 @@ def process_data(input_data_list, input_perfdog_config, output_xlsx, divided_by_
                                 ws_target.row_dimensions[i].height = (str(first_cell.value).count('\n') + 1) * 80
                         else:
                             first_cell.alignment = Alignment(wrap_text=False)
-                            current_width = ws_target.column_dimensions['A'].width if 'A' in ws_target.column_dimensions else 15
-                            ws_target.column_dimensions['A'].width = max(current_width, len(str(first_cell.value)) * 2)
+                            # estimate display width: CJK chars count as 2, ASCII as 1
+                            text = str(first_cell.value)
+                            char_width = sum(2 if ord(c) > 127 else 1 for c in text)
+                            current_width = ws_target.column_dimensions['A'].width if ws_target.column_dimensions['A'].width else 15
+                            ws_target.column_dimensions['A'].width = max(current_width, char_width + 2)
 
-            # fixed width for data columns
+                    # left-align data cells in VS sheet
+                    if sheet_name == target_project_compare_sheet_name and i == 1:
+                        for j in range(2, len(row) + 1):
+                            c = ws_target.cell(row=i, column=j)
+                            c.alignment = Alignment(horizontal='left', wrap_text=True)
+
+            # apply left alignment to all data cells (col >= 2) in VS sheet header row (row 1)
+            if sheet_name == target_project_compare_sheet_name:
+                for j in range(2, ws_target.max_column + 1):
+                    c = ws_target.cell(row=1, column=j)
+                    c.alignment = Alignment(horizontal='left', wrap_text=True)
+
+            # data columns: fixed width 22
             for col in range(2, ws_target.max_column + 1):
-                ws_target.column_dimensions[openpyxl.utils.get_column_letter(col)].width = 15
+                ws_target.column_dimensions[openpyxl.utils.get_column_letter(col)].width = 22
 
             # highlight important metric rows
             important_background_fill = openpyxl.styles.PatternFill(start_color="f9d3e3", end_color="f9d3e3", fill_type="solid")
@@ -517,27 +532,53 @@ def interpolate_among_3color(percentage, color0, color1, color2):
 def rgb_to_hex(rgb):
     return "{:02x}{:02x}{:02x}".format(int(rgb[0] * 255), int(rgb[1] * 255), int(rgb[2] * 255))
 
-def color_cell(value, min_value, max_value):
-    color_low  = (1, 0, 0)       # red   (low  = bad)
-    color_mid  = (1, 0.75, 0)    # orange (mid = neutral)
-    color_high = (0, 0.44, 0.75) # blue  (high = good)
+NEUTRAL_ZONE_LOW  = 0.90  # below this: pure blue gradient
+NEUTRAL_ZONE_HIGH = 1.10  # above this: orange-red gradient
+COLOR_NEUTRAL = (0.75, 0.75, 0.75)  # gray at 100%
 
-    if max_value > min_value:
-        ratio = (value - min_value) / (max_value - min_value)
-        ratio = max(0.0, min(1.0, ratio))  # clamp to [0, 1]
-        interpolated_color = interpolate_among_3color(ratio, color_low, color_mid, color_high)
-        hex_color = rgb_to_hex(interpolated_color)
-        return PatternFill(start_color=hex_color, end_color=hex_color, fill_type="solid")
+def color_cell(value, min_value, max_value):
+    """
+    Smooth gradient using log scale centered at 1.0 (100%):
+      value << 1  → blue
+      value ≈ 0.9 → blue-gray blend
+      value = 1.0 → gray
+      value ≈ 1.1 → gray-orange blend
+      value >> 1  → red
+    No hard cutoffs; the ±10% neutral zone fades naturally through gray.
+    """
+    color_blue   = (0, 0.44, 0.75)
+    color_gray   = (0.75, 0.75, 0.75)
+    color_orange = (1, 0.75, 0)
+    color_red    = (1, 0, 0)
+
+    def make_fill(rgb):
+        h = rgb_to_hex(rgb)
+        return PatternFill(start_color=h, end_color=h, fill_type="solid")
+
+    # map value to [0,1] using log scale; log(1.0)=0 maps to 0.5 (gray center)
+    # ±log(1.1) ≈ ±0.095 maps to the ±10% neutral boundary
+    # use log(2) ≈ 0.693 as the saturation scale so that 200% → ~1.0 and 50% → ~0.0
+    log_val = math.log(max(value, 1e-9))
+    scale = math.log(2)  # half-saturation at 2x or 0.5x
+    ratio = 0.5 + log_val / (2 * scale)
+    ratio = max(0.0, min(1.0, ratio))
+
+    # 5-stop color map: blue → blue → gray → orange → red
+    # stops at [0.0, 0.35, 0.5, 0.65, 1.0]
+    if ratio <= 0.35:
+        t = ratio / 0.35
+        rgb = interpolate_among_3color(t, color_blue, color_blue, color_blue)
+    elif ratio <= 0.5:
+        t = (ratio - 0.35) / (0.5 - 0.35)
+        rgb = interpolate_among_3color(t, color_blue, color_gray, color_gray)
+    elif ratio <= 0.65:
+        t = (ratio - 0.5) / (0.65 - 0.5)
+        rgb = interpolate_among_3color(t, color_gray, color_gray, color_orange)
     else:
-        # 只有1个值时，以 log 尺度相对 1.0 着色：
-        # value=1.0(100%) → 橙色(中性); value>>1 → 蓝色; value<<1 → 红色
-        log_val = math.log(max(value, 1e-9))  # log(1.0)=0，>0蓝，<0红
-        # 将 log_val 映射到 [0,1]，以 ±log(10) ≈ ±2.3 为软饱和点
-        ratio = 0.5 + log_val / (2 * math.log(10)) * 0.5
-        ratio = max(0.0, min(1.0, ratio))
-        interpolated_color = interpolate_among_3color(ratio, color_low, color_mid, color_high)
-        hex_color = rgb_to_hex(interpolated_color)
-        return PatternFill(start_color=hex_color, end_color=hex_color, fill_type="solid")
+        t = (ratio - 0.65) / (1.0 - 0.65)
+        rgb = interpolate_among_3color(t, color_orange, color_orange, color_red)
+
+    return make_fill(rgb)
 
 def main():
     parser = argparse.ArgumentParser(description='Process PerfDog exported Excel files and generate better comparison.')
