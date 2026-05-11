@@ -1,91 +1,130 @@
 # Perfdog Better Compare
 
-This gives you a better compare look-and-feel, when comparing multiple test cases' [PerfDog](https://perfdog.qq.com/) performance.
+A Python script that generates a better comparison view from [PerfDog](https://perfdog.qq.com/) exported Excel files.
 
 ## What does this do
 
-Let's say, you are comparing 3 projects (or test cases) in PerfDog. After exporting the compare result,
+Let's say you are comparing multiple test cases in PerfDog. After exporting the compare result,
+
 ![](doc/assets/perfdog_export.png)
 
-Perfdog genertes this raw excel,
+PerfDog generates this raw Excel file,
+
 ![](doc/assets/perfdog_export_result.png)
 
-And this python script improves it by,
+This script improves it by generating a single **CombinedCompare** sheet that:
 
-1. show the compare percentage heatmap of Target VS. Others,
-   ![](doc/assets/better_compare_2.png)
-2. show the compare percentage bar among all test cases
-   ![](doc/assets/better_compare_1.png)
-3. support normalized by the framerate and/or resolution among different test cases.
+1. Shows each test case's raw metric values with **data bar** visualization
+2. Shows each test case's **÷ Target percentage** with **heatmap coloring** side-by-side
+   - 🔴 Red = high ratio (much larger than target)
+   - ⬜ Gray = ~100% (within ±10%, smooth gradient)
+   - 🔵 Blue = low ratio (much smaller than target)
+3. Automatically picks the first test case (by original Excel row order) as the compare target
+4. Sorts metrics by ratio descending — highest-deviation metrics appear first
+5. Supports normalization by framerate and/or resolution
+6. Output filename includes a timestamp to avoid overwriting previous results
 
 ## Usage
 
-```bash
-usage: perfdog_export_better_compare.py
-    [-h] # show this help
-
-    [input_file]  # optional, input a single PerfDog exported xlsx file
-    
-    [--input_data_list INPUT_DATA_LIST [INPUT_DATA_LIST ...]] # optional, input multiple PerfDog exported xlsx files. multiple xlsx stats will be averaged for each project.
-    [--output_xlsx OUTPUT_XLSX] # output file path. if not specified, OUTPUT_XLSX will be INPUT_DATA_LIST[0]_better_compare.xlsx
-
-    [--input_perfdog_config INPUT_PERFDOG_CONFIG] # optional, Input PerfDog config file path (json format). Default is perfdog_export_better_compare_config.json
-
-    [--divided_by_framerate] # false by default, whether normalized some columns by the framerate, see also perfdog_export_better_compare_config.json
-    [--divided_by_resolution] # false by default, whether normalized some columns by the resolution, see also perfdog_export_better_compare_config.json
-
-    [--compare_target_column_name COMPARE_TARGET_COLUMN_NAME] # optional, default to "项目", you may change to "用例"
-    [--compare_target_name COMPARE_TARGET_NAME] # optional, input one target name and generate the "Target VS. Others" sheet. target name is one of values in compare_target_column_name column (default is "项目" ("project"), you may change to "用例" ("test case") by the --compare_target_column_name param)
-
-    [--show_only_columns_in_config SHOW_ONLY_COLUMNS_IN_CONFIG] # true by default, only output the important columns list in the config json
 ```
+python perfdog_export_better_compare.py [input_file]
+       [-h]
+       [-i INPUT_DATA_LIST ...]
+       [-o OUTPUT_XLSX]
+       [-c INPUT_PERFDOG_CONFIG]
+       [-f]
+       [-r]
+       [-C COMPARE_TARGET_COLUMN_NAME]
+       [-t COMPARE_TARGET_NAME]
+       [-s SHOW_ONLY_COLUMNS_IN_CONFIG]
+       [-n / --no_sort_vs]
+```
+
+| Short | Long | Default | Description |
+|-------|------|---------|-------------|
+| | `input_file` | | Single input xlsx (positional) |
+| `-i` | `--input_data_list` | | Multiple input xlsx files; stats are averaged per test case |
+| `-o` | `--output_xlsx` | `<input>_better_compare_<timestamp>.xlsx` | Output file path |
+| `-c` | `--input_perfdog_config` | `perfdog_export_better_compare_config.json` | Config JSON path |
+| `-f` | `--divided_by_framerate` | `False` | Normalize selected columns by framerate |
+| `-r` | `--divided_by_resolution` | `False` | Normalize selected columns by resolution |
+| `-C` | `--compare_target_column_name` | `用例` | Column to use as test case identifier |
+| `-t` | `--compare_target_name` | *(first row)* | Target test case name for percentage comparison |
+| `-s` | `--show_only_columns_in_config` | `False` | Only show columns listed in config JSON |
+| `-n` | `--no_sort_vs` | | Disable descending sort by ratio in the combined sheet |
 
 ### Examples
 
-#### Default mode
+#### Default mode — just pass the file
 
-支持两种方式输入单个文件：
 ```bash
-# 方式1：直接输入文件名（推荐）
-python './perfdog_export_better_compare.py' ./PD_20240229_14_28_12.xlsx
-
-# 方式2：使用 --input_data_list 参数
-python './perfdog_export_better_compare.py' --input_data_list ./PD_20240229_14_28_12.xlsx
+python perfdog_export_better_compare.py ./PD_20240229_14_28_12.xlsx
 ```
 
-#### Normalization
+The first test case (by original Excel row order) is automatically used as the compare target.
 
-Sometimes, different test case has different framerate. To make the compare reasonalble, you can normalized some columns by the framerate. Normalized columns are specified in the input config json file.
+#### Specify compare target explicitly
 
 ```bash
-python './perfdog_export_better_compare.py' --divided_by_framerate --input_data_list ./PD_20240229_14_28_12.xlsx
+python perfdog_export_better_compare.py ./PD_20240229_14_28_12.xlsx -t "用例列的某一单元格的值"
 ```
 
-Sometimes, different test case has different framerate and resolution. To make the compare reasonalble, you can normalized some columns by both of them. Normalized columns are specified in the input config json file.
+#### Compare by project instead of test case
 
 ```bash
-python './perfdog_export_better_compare.py' --divided_by_framerate --divided_by_resolution --input_data_list ./PD_20240229_14_28_12.xlsx
+python perfdog_export_better_compare.py ./PD_20240229_14_28_12.xlsx -C 项目 -t "项目列的某一单元格的值"
 ```
 
-#### Compare Target Heatmap
-
-generate ProjectA VS. OtherProjects compare heatmap sheet,
+#### Normalization by framerate
 
 ```bash
-python './perfdog_export_better_compare.py' --compare_target_name ProjectA --input_data_list ./PD_20240229_14_28_12.xlsx
+python perfdog_export_better_compare.py ./PD_20240229_14_28_12.xlsx -f
 ```
 
-generate TestCaseA VS. OtherTestCases compare heatmap sheet,
+#### Normalization by framerate and resolution
 
 ```bash
-python './perfdog_export_better_compare.py' --compare_target_column_name 用例 --compare_target_name TestCaseA --input_data_list ./PD_20240229_14_28_12.xlsx
+python perfdog_export_better_compare.py ./PD_20240229_14_28_12.xlsx -f -r
 ```
 
-#### Multiple Input Files
+#### Multiple input files (averaged)
 
-For more confident results, you may do the same test case for multiple times. Hence you get multiple exported xlsxs. You can input multiple xlsx to this script, and it will group data for each project (or test case, depends on `--compare_target_column_name`), and **average** the column data.
-
-Note, multiple xlsx must have the same value in `--compare_target_column_name` column (default is **项目**(project) column).
+If you run the same test case multiple times and get multiple exported xlsx files, pass them all — the script groups by test case and **averages** the numeric columns:
 
 ```bash
-python './perfdog_export_better_compare.py' --input_data_list ./PD_20240229_14_28_12.xlsx ./PD_20240229_14_42_57.xlsx
+python perfdog_export_better_compare.py -i ./PD_20240229_14_28_12.xlsx ./PD_20240229_14_42_57.xlsx
+```
+
+## Output sheet structure
+
+The output xlsx contains:
+
+| Sheet | Description |
+|-------|-------------|
+| `CombinedCompare` | Main sheet: metrics as rows, each test case has a raw-value column + a ÷Target% column |
+| `CompareSource0` | Raw data from first input file (unmodified) |
+| `CompareSource1` | Raw data from second input file (if provided), etc. |
+
+### CombinedCompare column layout
+
+```
+Metric | [TARGET] raw | [TARGET] % | CaseA raw | CaseA ÷ TARGET % | CaseB raw | CaseB ÷ TARGET % | ...
+```
+
+- **Raw columns** (width 18): original metric values with gray data bar
+- **% columns** (width 22): ratio = CaseX / TARGET, formatted as percentage with heatmap fill
+- **Frozen**: column A (metric names) + first 3 rows (用例 / 项目 / 场景)
+- **Top-right info cell**: generation command and timestamp
+
+## Configuration
+
+Edit `perfdog_export_better_compare_config.json` to customize:
+
+- `test_case_column` / `project_column`: column names for test case and project
+- `average_framerate_column`: FPS column name
+- `forzen_column_num`: number of header rows to freeze (default 3)
+- `columns_always_shown`: columns always included when `--show_only_columns_in_config` is set
+- `columns_divide_by_framerate`: columns normalized when `-f` is used
+- `columns_divide_by_resolution`: columns normalized when `-r` is used
+- `columns_divide_by_framerate_and_resolution`: columns normalized when both `-f -r` are used
+- `columns_important_background`: columns highlighted with pink background
