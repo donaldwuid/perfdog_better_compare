@@ -14,15 +14,13 @@ PerfDog generates this raw Excel file,
 
 This script improves it by generating a single **CombinedCompare** sheet that:
 
+![alt text](doc/assets/perfdog_better_compare.png)
+
 1. Shows each test case's raw metric values with **data bar** visualization
 2. Shows each test case's **÷ Target percentage** with **heatmap coloring** side-by-side
    - 🔴 Red = high ratio (much larger than target)
    - ⬜ Gray = ~100% (within ±10%, smooth gradient)
    - 🔵 Blue = low ratio (much smaller than target)
-3. Automatically picks the first test case (by original Excel row order) as the compare target
-4. Sorts metrics by ratio descending — highest-deviation metrics appear first
-5. Supports normalization by framerate and/or resolution
-6. Output filename includes a timestamp to avoid overwriting previous results
 
 ## Usage
 
