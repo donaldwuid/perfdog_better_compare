@@ -174,347 +174,271 @@ def process_data(input_data_list, input_perfdog_config, output_xlsx, divided_by_
                 df_processed.rename(columns={column: column + '\n(/(framerate*resolution))'}, inplace=True)
 
 
-    def fix_filename(filename):
-        # sanitize illegal characters (Windows)
-        illegal_chars = r'[<>:："/\\|?*]'
-        filename = re.sub(illegal_chars, '_', filename)
-        # truncate if adding " VS. Others" would exceed 31 chars (Excel sheet name limit)
-        max_name_length = 31 - len(" VS. Others")
-        if len(filename) > max_name_length:
-            filename = filename[:max_name_length]
-        return filename
-
+    # df_compare_target is no longer used for sheet generation (merged into CombinedCompare)
+    # kept for has_compare / sort logic reference
     df_compare_target = None
     raw_values_dict = {}
     target_project_compare_sheet_name = ""
     if compare_target_column_name and compare_target_name:
-        # find the target row
         target_row = df_processed.loc[df_processed[compare_target_column_name] == compare_target_name]
         if not target_row.empty:
-            target_project_compare_sheet_name = fix_filename(compare_target_name) + " VS. Others"
-            comparison_rows = []
-            raw_values_list = []  # parallel list to comparison_rows
-
-            for index, row in df_processed.iterrows():
-                if row[compare_target_column_name] == compare_target_name:
-                    continue
-
-                comparison_row = {compare_target_column_name: f"{compare_target_name}\n VS. \n{row[compare_target_column_name]}"}
-                row_raw_values = {}
-
-                for col in df_processed.columns[1:]:
-                    target_value = target_row[col].values[0]
-                    other_value = row[col]
-
-                    if isinstance(target_value, (int, float)) and isinstance(other_value, (int, float)) and not np.isclose(other_value, 0.0):
-                        comparison_row[col] = target_value / other_value
-                        row_raw_values[col] = f"{target_value} / {other_value}"
-                    else:
-                        comparison_row[col] = f"{target_value} / {other_value}"
-                        row_raw_values[col] = f"{target_value} / {other_value}"
-
-                comparison_rows.append(comparison_row)
-                raw_values_list.append(row_raw_values)
-
-            # build DataFrame at once to avoid fragmentation from row-by-row loc appends
-            df_compare_target = pd.DataFrame(comparison_rows, columns=df_processed.columns)
-            raw_values_dict = {i: v for i, v in enumerate(raw_values_list)}
-
-            # sort columns by ratio (desc): fixed header cols stay first, non-numeric cols sink to bottom
-            if sort_vs_by_value and not df_compare_target.empty:
-                all_cols = list(df_compare_target.columns)
-                frozen_n = config_data.get('forzen_column_num', 3)
-                fixed_cols = all_cols[:frozen_n]
-                metric_cols = all_cols[frozen_n:]
-
-                def col_sort_key(col_name):
-                    vals = df_compare_target[col_name]
-                    numeric_vals = [v for v in vals if isinstance(v, (int, float))]
-                    return statistics.mean(numeric_vals) if numeric_vals else float('-inf')
-
-                numeric_metric_cols = sorted(
-                    [c for c in metric_cols if col_sort_key(c) > float('-inf')],
-                    key=col_sort_key, reverse=True
-                )
-                non_numeric_metric_cols = [c for c in metric_cols if col_sort_key(c) == float('-inf')]
-                sorted_cols = fixed_cols + numeric_metric_cols + non_numeric_metric_cols
-                df_compare_target = df_compare_target[sorted_cols]
-
-            print(f"  [info] VS sheet: '{target_project_compare_sheet_name}'")
+            df_compare_target = True  # sentinel: target exists
+            print(f"  [info] Compare target found: '{compare_target_name}'")
         else:
-            print(f"  [warn] Cannot find compare target '{compare_target_name}', VS sheet will not be generated.")
+            print(f"  [warn] Cannot find compare target '{compare_target_name}', percentage columns will not be generated.")
 
 
     def path_leaf(path):
         head, tail = ntpath.split(path)
         return tail or ntpath.basename(head)
-        
-    # 生成临时的标准格式文件
+
+    # ------------------------------------------------------------------ #
+    #  Build the combined transposed sheet directly into openpyxl          #
+    #  Layout (after transpose):                                           #
+    #    Row 1 (header): metric name | Target | Target% | A | A% | B | B% #
+    #    Row 2+: values per case                                           #
+    # ------------------------------------------------------------------ #
+
+    frozen_n = config_data.get('forzen_column_num', 3)  # number of header rows to freeze (用例/项目/场景)
+    important_background_fill = PatternFill(start_color="f9d3e3", end_color="f9d3e3", fill_type="solid")
+
+    wb_out = openpyxl.Workbook()
+
+    # ---- build CombinedCompare sheet ---------------------------------- #
+    ws_combined = wb_out.active
+    ws_combined.title = 'CombinedCompare'
+
+    # determine column order in df_processed
+    all_metric_cols = list(df_processed.columns)   # first frozen_n are header cols (用例/项目/场景)
+    header_cols = all_metric_cols[:frozen_n]        # e.g. [用例, 项目, 场景]
+    metric_cols_only = all_metric_cols[frozen_n:]   # actual metric columns
+
+    # get all case names and target row
+    all_case_names = list(df_processed[compare_target_column_name])
+    has_compare = (df_compare_target is not None and compare_target_name)
+    target_row_data = None
+    if has_compare:
+        target_mask = df_processed[compare_target_column_name] == compare_target_name
+        target_row_data = df_processed[target_mask].iloc[0]
+
+    # sort metric columns if requested (same logic as before, based on VS ratios)
+    if has_compare and sort_vs_by_value:
+        def col_sort_key_combined(col_name):
+            if target_row_data is None:
+                return float('-inf')
+            t_val = target_row_data[col_name]
+            ratios = []
+            for _, r in df_processed.iterrows():
+                if r[compare_target_column_name] == compare_target_name:
+                    continue
+                o_val = r[col_name]
+                if isinstance(t_val, (int, float)) and isinstance(o_val, (int, float)) and not np.isclose(o_val, 0.0):
+                    ratios.append(t_val / o_val)
+            return statistics.mean(ratios) if ratios else float('-inf')
+
+        numeric_metric_cols = sorted(
+            [c for c in metric_cols_only if col_sort_key_combined(c) > float('-inf')],
+            key=col_sort_key_combined, reverse=True
+        )
+        non_numeric_metric_cols = [c for c in metric_cols_only if col_sort_key_combined(c) == float('-inf')]
+        sorted_metric_cols = numeric_metric_cols + non_numeric_metric_cols
+    else:
+        sorted_metric_cols = metric_cols_only
+
+    # ordered list of all cases: target first, then others
+    if has_compare:
+        other_cases = [n for n in all_case_names if n != compare_target_name]
+        ordered_cases = [compare_target_name] + other_cases
+    else:
+        ordered_cases = all_case_names
+
+    # build lookup: case_name -> row series
+    case_data = {r[compare_target_column_name]: r for _, r in df_processed.iterrows()}
+
+    # ---- write header row (row=1 in transposed sheet = "metric name" label row) ----
+    # col layout: A=metric_name | B=Target_raw | C=Target_% | D=A_raw | E=A_% | ...
+    ws_combined.cell(row=1, column=1, value="Metric")
+    data_col_start = 2  # first data column
+    # case_col_map: case_name -> (raw_col, pct_col)  [1-indexed]
+    case_col_map = {}
+    col_idx = data_col_start
+    for case_name in ordered_cases:
+        is_target_case = has_compare and (case_name == compare_target_name)
+        # raw value column header: mark target with [TARGET] prefix
+        raw_label = f"[TARGET]\n{case_name}" if is_target_case else case_name
+        hdr_raw = ws_combined.cell(row=1, column=col_idx, value=raw_label)
+        hdr_raw.alignment = Alignment(horizontal='left', wrap_text=True)
+        raw_col = col_idx
+        col_idx += 1
+        if has_compare:
+            # percentage column header: show "case vs. target %"
+            if is_target_case:
+                pct_label = f"[TARGET]\n{case_name}\n%"
+            else:
+                pct_label = f"{case_name}\nvs. {compare_target_name}\n%"
+            hdr_pct = ws_combined.cell(row=1, column=col_idx, value=pct_label)
+            hdr_pct.alignment = Alignment(horizontal='left', wrap_text=True)
+            pct_col = col_idx
+            col_idx += 1
+        else:
+            pct_col = None
+        case_col_map[case_name] = (raw_col, pct_col)
+
+    # ---- write data rows ------------------------------------------------
+    # rows: header_cols first (用例/项目/场景), then sorted metric cols
+    all_rows_in_order = header_cols + sorted_metric_cols
+
+    for row_i, metric in enumerate(all_rows_in_order, start=2):
+        # write metric name in col A
+        name_cell = ws_combined.cell(row=row_i, column=1, value=metric)
+        is_header_row = metric in header_cols
+
+        # check if this metric should have important background
+        base_metric = metric.split('\n')[0] if '\n' in metric else metric
+        is_important = any(cfg in base_metric for cfg in config_data['columns_important_background'])
+        if is_important:
+            name_cell.fill = important_background_fill
+
+        if not is_header_row:
+            name_cell.alignment = Alignment(wrap_text=False)
+            # auto-fit col A width
+            char_width = sum(2 if ord(c) > 127 else 1 for c in str(metric))
+            current_w = ws_combined.column_dimensions['A'].width or 15
+            ws_combined.column_dimensions['A'].width = max(current_w, char_width + 2)
+        else:
+            name_cell.alignment = Alignment(wrap_text=True)
+
+        # write values for each case
+        raw_values_for_databar = []  # collect raw numerics for data bar rule
+        pct_values_for_color = []    # collect pct numerics for heatmap
+
+        for case_name in ordered_cases:
+            raw_col, pct_col = case_col_map[case_name]
+            row_series = case_data.get(case_name)
+            if row_series is None:
+                continue
+            cell_value = row_series[metric] if metric in row_series.index else None
+
+            # raw value cell
+            raw_cell = ws_combined.cell(row=row_i, column=raw_col, value=cell_value)
+            if is_important:
+                raw_cell.fill = important_background_fill
+            if isinstance(cell_value, (int, float)):
+                raw_values_for_databar.append(cell_value)
+
+            # percentage cell
+            if has_compare and pct_col is not None:
+                if is_header_row:
+                    # for header rows (用例/项目/场景): show raw value in pct col too, no formatting
+                    pct_cell = ws_combined.cell(row=row_i, column=pct_col, value=cell_value)
+                    pct_cell.alignment = Alignment(horizontal='left', wrap_text=True)
+                else:
+                    pct_ratio = None
+                    if case_name == compare_target_name:
+                        # target vs itself = 100%
+                        if isinstance(cell_value, (int, float)):
+                            pct_ratio = 1.0
+                    else:
+                        if target_row_data is not None:
+                            t_val = target_row_data[metric]
+                            o_val = cell_value
+                            if isinstance(t_val, (int, float)) and isinstance(o_val, (int, float)) and not np.isclose(o_val, 0.0):
+                                pct_ratio = t_val / o_val
+
+                    if pct_ratio is not None:
+                        pct_cell = ws_combined.cell(row=row_i, column=pct_col, value=pct_ratio)
+                        pct_cell.number_format = "0.00%"
+                        pct_cell.fill = color_cell(pct_ratio, 0, 1)
+                        pct_values_for_color.append(pct_ratio)
+                        # add comment with raw values
+                        if case_name != compare_target_name and target_row_data is not None:
+                            t_val = target_row_data[metric]
+                            o_val = cell_value
+                            if isinstance(t_val, (int, float)) and isinstance(o_val, (int, float)):
+                                try:
+                                    pct_cell.comment = openpyxl.comments.Comment(
+                                        f"{t_val} / {o_val}",
+                                        'PerfDog Better Compare'
+                                    )
+                                except Exception:
+                                    pass
+                    else:
+                        pct_cell = ws_combined.cell(row=row_i, column=pct_col, value=f"{target_row_data[metric] if target_row_data is not None else '-'} / {cell_value}")
+                        pct_cell.alignment = Alignment(horizontal='left')
+
+        # apply data bar to raw value columns for this metric row (skip header rows)
+        if not is_header_row and raw_values_for_databar:
+            max_v = max(raw_values_for_databar)
+            avg_v = statistics.mean(raw_values_for_databar)
+            raw_col_letters = [
+                openpyxl.utils.get_column_letter(case_col_map[c][0])
+                for c in ordered_cases
+                if isinstance(case_data.get(c, {}).get(metric) if hasattr(case_data.get(c, {}), 'get') else None, (int, float))
+            ]
+            # apply data bar across all raw columns in this row
+            raw_cols_indices = [case_col_map[c][0] for c in ordered_cases]
+            first_raw = openpyxl.utils.get_column_letter(min(raw_cols_indices))
+            # build range string covering only raw columns (interleaved, so apply per-column)
+            for case_name in ordered_cases:
+                raw_col_i = case_col_map[case_name][0]
+                col_letter = openpyxl.utils.get_column_letter(raw_col_i)
+                cell_ref = f"{col_letter}{row_i}"
+                rule = DataBarRule(
+                    start_type="num", start_value=max_v - avg_v,
+                    end_type="num", end_value=max_v,
+                    color="999999"
+                )
+                ws_combined.conditional_formatting.add(cell_ref, rule)
+
+    # ---- set column widths ----------------------------------------------
+    # col A already auto-sized above; data columns
+    for case_name in ordered_cases:
+        raw_col, pct_col = case_col_map[case_name]
+        ws_combined.column_dimensions[openpyxl.utils.get_column_letter(raw_col)].width = 20
+        if pct_col is not None:
+            ws_combined.column_dimensions[openpyxl.utils.get_column_letter(pct_col)].width = 30
+
+    # ---- header row height (row 1) --------------------------------------
+    max_lines = max(
+        (str(ws_combined.cell(row=1, column=c).value or '').count('\n') + 1
+         for c in range(1, ws_combined.max_column + 1)),
+        default=1
+    )
+    ws_combined.row_dimensions[1].height = max(max_lines * 18, 80)
+
+    # ---- freeze panes: freeze col A + first frozen_n data rows ----------
+    ws_combined.freeze_panes = ws_combined.cell(row=frozen_n + 2, column=2)
+
+    # ---- copy CompareSource sheets as-is --------------------------------
     base_output_xlsx = os.path.splitext(output_xlsx)[0] + "_base.xlsx"
-    
-    # write to intermediate base file (VS sheet first if present, then BarCompare, then CompareSource)
     with pd.ExcelWriter(base_output_xlsx) as writer:
-        if df_compare_target is not None:
-            df_compare_target.to_excel(writer, sheet_name=target_project_compare_sheet_name, index=False)
-        df_processed.to_excel(writer, sheet_name='BarCompare', index=False)
-        # CompareSource sheets keep raw data as-is
         for i, one_df in enumerate(input_df_list):
             one_df.to_excel(writer, sheet_name='CompareSource' + str(i), index=False)
 
-    # apply styles to the intermediate file
-    wb = openpyxl.load_workbook(base_output_xlsx)
-
-    # apply data bars to BarCompare sheet
-    ws = wb['BarCompare']
-    for i, column in enumerate(ws.columns):
-        column = [cell for cell in column]
-        if all(isinstance(cell.value, (int, float)) for cell in column[1:]):
-            values = [cell.value for cell in column[1:]]
-            if values:
-                max_value = max(values)
-                average_value = statistics.mean(values)
-                rule = DataBarRule(start_type="num", start_value=max_value - average_value, end_type="num", end_value=max_value, color="999999")
-                ws.conditional_formatting.add(openpyxl.utils.get_column_letter(i + 1) + '2:' + openpyxl.utils.get_column_letter(i + 1) + str(ws.max_row), rule)
-
-    # apply styles and comments to VS sheet
-    if df_compare_target is not None:
-        ws_target_project_compare_sheet = wb[target_project_compare_sheet_name]
-
-        for i, row in enumerate(ws_target_project_compare_sheet.iter_rows(), 1):
-            values = []
-            for j, cell in enumerate(row, 1):
-                if isinstance(cell.value, (int, float)):
-                    values.append(cell.value)
-                    # add raw value comment
-                    try:
-                        row_idx = i - 2  # skip header row; dict keys start at 0
-                        if row_idx >= 0 and j < len(df_compare_target.columns):
-                            col_name = df_compare_target.columns[j]
-                            if row_idx in raw_values_dict and col_name in raw_values_dict[row_idx]:
-                                raw_value = raw_values_dict[row_idx][col_name]
-                                if raw_value:
-                                    cell.comment = openpyxl.comments.Comment(
-                                        raw_value,
-                                        'PerfDog Better Compare'
-                                    )
-                    except Exception as e:
-                        print(f"  [warn] Failed to add comment at row {i}, col {j}: {e}")
-                        continue
-
-            if len(values) > 0:
-                q1 = np.percentile(values, 25)
-                q3 = np.percentile(values, 75)
-                iqr = q3 - q1
-                lower_bound = q1 - (1.5 * iqr)
-                upper_bound = q3 + (1.5 * iqr)
-
-                for cell in row:
-                    if isinstance(cell.value, (int, float)):
-                        cell.fill = color_cell(cell.value, lower_bound, upper_bound)
-                        cell.number_format = "0.00%"
-
-    # apply header styles to all non-CompareSource sheets
-    important_background_fill = openpyxl.styles.PatternFill(start_color="f9d3e3", end_color="f9d3e3", fill_type="solid")
-    for one_ws_name in wb.sheetnames:
-        if one_ws_name.startswith('CompareSource'):
-            continue
-
-        one_ws = wb[one_ws_name]
-        # wrap text and highlight important columns in header row
-        for cell in one_ws[1]:
-            cell.alignment = Alignment(wrap_text=True)
-            if cell.value is not None:
-                if any(config_col in str(cell.value) for config_col in config_data['columns_important_background']):
-                    cell.fill = important_background_fill
-
-        # auto row height based on line count in header
-        max_lines = max(
-            (str(cell.value).count('\n') + 1 for cell in one_ws[1] if cell.value is not None),
-            default=1
-        )
-        one_ws.row_dimensions[1].height = max_lines * 80
-
-        # set default column width
-        for column in one_ws.columns:
-            one_ws.column_dimensions[column[0].column_letter].width = 15
-
-    wb.save(base_output_xlsx)
-
-    # build transposed output workbook
-    wb_transposed = openpyxl.Workbook()
-    wb = openpyxl.load_workbook(base_output_xlsx)
-
-    # VS sheet first, then BarCompare
-    sheets_to_transpose = []
-    if df_compare_target is not None:
-        sheets_to_transpose.append(target_project_compare_sheet_name)
-    sheets_to_transpose.append('BarCompare')
-
-    for sheet_name in sheets_to_transpose:
-        if sheet_name in wb.sheetnames:
-            ws_source = wb[sheet_name]
-
-            if sheet_name in wb_transposed.sheetnames:
-                wb_transposed.remove(wb_transposed[sheet_name])
-
-            ws_target = wb_transposed.create_sheet(sheet_name)
-
-            # read and transpose data
-            data = [[cell.value for cell in row] for row in ws_source.rows]
-            transposed_data = list(zip(*data))
-
-            # write transposed data with formatting
-            for i, row in enumerate(transposed_data, 1):
-                values = []  # numeric values in this row, for data bar / heatmap
-                for j, value in enumerate(row, 1):
-                    cell = ws_target.cell(row=i, column=j, value=value)
-
-                    if i == 1:  # header row (first col after transpose)
-                        cell.alignment = Alignment(wrap_text=True)
-                    elif sheet_name == target_project_compare_sheet_name:
-                        if isinstance(value, (int, float)):
-                            values.append(value)
-                            cell.number_format = "0.00%"
-                            # after transpose: row i → original column i-1; col j → original row j-2
-                            try:
-                                if j >= 2 and i - 1 < len(df_compare_target.columns):
-                                    original_col = df_compare_target.columns[i-1]
-                                    row_idx = j - 2
-                                    if row_idx in raw_values_dict and original_col in raw_values_dict[row_idx]:
-                                        raw_value = raw_values_dict[row_idx][original_col]
-                                        if raw_value:
-                                            cell.comment = openpyxl.comments.Comment(
-                                                text=raw_value,
-                                                author='PerfDog Better Compare'
-                                            )
-                            except Exception as e:
-                                print(f"  [warn] Failed to add comment at row {i}, col {j}: {e}")
-
-                    elif sheet_name == 'BarCompare':
-                        if isinstance(value, (int, float)):
-                            values.append(value)
-
-                # apply per-row formatting after collecting all values
-                if i > 1:
-                    if sheet_name == 'BarCompare' and values:
-                        max_value = max(values)
-                        average_value = statistics.mean(values)
-                        rule = DataBarRule(
-                            start_type="num", start_value=max_value - average_value,
-                            end_type="num", end_value=max_value,
-                            color="999999"
-                        )
-                        ws_target.conditional_formatting.add(
-                            f"B{i}:{openpyxl.utils.get_column_letter(ws_target.max_column)}{i}",
-                            rule
-                        )
-                    elif sheet_name == target_project_compare_sheet_name and values:
-                        q1 = np.percentile(values, 25)
-                        q3 = np.percentile(values, 75)
-                        iqr = q3 - q1
-                        lower_bound = q1 - (1.5 * iqr)
-                        upper_bound = q3 + (1.5 * iqr)
-                        for j, value in enumerate(row, 1):
-                            if isinstance(value, (int, float)):
-                                cell = ws_target.cell(row=i, column=j)
-                                cell.fill = color_cell(value, lower_bound, upper_bound)
-
-                # handle first column (metric name) formatting
-                if i > 1:
-                    first_cell = ws_target.cell(row=i, column=1)
-                    if first_cell.value is not None:
-                        if str(first_cell.value) in [config_data["project_column"], config_data["test_case_column"]]:
-                            first_cell.alignment = Alignment(wrap_text=True)
-                            if '\n' in str(first_cell.value):
-                                ws_target.row_dimensions[i].height = (str(first_cell.value).count('\n') + 1) * 80
-                        else:
-                            first_cell.alignment = Alignment(wrap_text=False)
-                            # estimate display width: CJK chars count as 2, ASCII as 1
-                            text = str(first_cell.value)
-                            char_width = sum(2 if ord(c) > 127 else 1 for c in text)
-                            current_width = ws_target.column_dimensions['A'].width if ws_target.column_dimensions['A'].width else 15
-                            ws_target.column_dimensions['A'].width = max(current_width, char_width + 2)
-
-                    # left-align data cells in VS sheet
-                    if sheet_name == target_project_compare_sheet_name and i == 1:
-                        for j in range(2, len(row) + 1):
-                            c = ws_target.cell(row=i, column=j)
-                            c.alignment = Alignment(horizontal='left', wrap_text=True)
-
-            # apply left alignment to all data cells (col >= 2) in VS sheet header row (row 1)
-            if sheet_name == target_project_compare_sheet_name:
-                for j in range(2, ws_target.max_column + 1):
-                    c = ws_target.cell(row=1, column=j)
-                    c.alignment = Alignment(horizontal='left', wrap_text=True)
-
-            # data columns: fixed width 22
-            for col in range(2, ws_target.max_column + 1):
-                ws_target.column_dimensions[openpyxl.utils.get_column_letter(col)].width = 22
-
-            # highlight important metric rows
-            important_background_fill = openpyxl.styles.PatternFill(start_color="f9d3e3", end_color="f9d3e3", fill_type="solid")
-            for i, row in enumerate(transposed_data, 1):
-                cell = ws_target.cell(row=i, column=1)
-                if cell.value is not None:
-                    cell_str = str(cell.value)
-                    base_name = cell_str.split('\n')[0] if '\n' in cell_str else cell_str
-                    for config_col in config_data['columns_important_background']:
-                        if config_col in base_name:
-                            cell.fill = important_background_fill
-                            break
-
-            # freeze panes: freeze first column + first (forzen_column_num) rows
-            ws_target.freeze_panes = ws_target.cell(row=config_data.get('forzen_column_num', 3) + 1, column=2)
-
-    # copy CompareSource sheets as-is (no transpose)
-    for sheet_name in wb.sheetnames:
+    wb_src = openpyxl.load_workbook(base_output_xlsx)
+    for sheet_name in wb_src.sheetnames:
         if sheet_name.startswith('CompareSource'):
-            ws_source = wb[sheet_name]
-            ws_target = wb_transposed.create_sheet(sheet_name)
-
+            ws_source = wb_src[sheet_name]
+            ws_target = wb_out.create_sheet(sheet_name)
             for row in ws_source.rows:
                 for cell in row:
                     new_cell = ws_target.cell(row=cell.row, column=cell.column, value=cell.value)
-                    # copy cell format
                     if cell.alignment:
                         new_cell.alignment = Alignment(
                             horizontal=cell.alignment.horizontal,
                             vertical=cell.alignment.vertical,
-                            text_rotation=cell.alignment.text_rotation,
                             wrap_text=cell.alignment.wrap_text,
-                            shrink_to_fit=cell.alignment.shrink_to_fit,
-                            indent=cell.alignment.indent
                         )
-                    if cell.fill:
-                        new_cell.fill = PatternFill(
-                            start_color=cell.fill.start_color.rgb,
-                            end_color=cell.fill.end_color.rgb,
-                            fill_type=cell.fill.fill_type
-                        )
-                    if cell.comment:
-                        new_cell.comment = openpyxl.comments.Comment(
-                            text=cell.comment.text,
-                            author=cell.comment.author
-                        )
-            
-            # copy column widths
             for column in ws_source.columns:
                 ws_target.column_dimensions[column[0].column_letter].width = ws_source.column_dimensions[column[0].column_letter].width
 
-            # copy row heights
-            for row in ws_source.row_dimensions:
-                if row in ws_source.row_dimensions:
-                    ws_target.row_dimensions[row] = ws_source.row_dimensions[row]
-
-    # remove default empty sheet created by openpyxl
-    if 'Sheet' in wb_transposed.sheetnames:
-        wb_transposed.remove(wb_transposed['Sheet'])
-    
-    # save final output
-    wb_transposed.save(output_xlsx)
-
-    # remove intermediate file
     os.remove(base_output_xlsx)
+
+    # remove default empty sheet
+    if 'Sheet' in wb_out.sheetnames:
+        wb_out.remove(wb_out['Sheet'])
+
+    wb_out.save(output_xlsx)
 
     print(f"  [done] Output saved: {output_xlsx}")
     print("=" * 60)
